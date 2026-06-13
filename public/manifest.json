@@ -1,0 +1,12 @@
+{
+  "name": "STARTO Fan Portal",
+  "short_name": "STARTO Fan",
+  "description": "STARTO ENTERTAINMENT & TOBE ファンポータル",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#070B17",
+  "theme_color": "#070B17",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
