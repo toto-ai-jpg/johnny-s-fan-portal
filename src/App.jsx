@@ -1,5 +1,11 @@
 import { useState, useEffect } from "react";
 import PROFILES from "./profiles.js";
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+);
 
 // ─── 管理者パスワード（変更可能）────────────────────────
 const ADMIN_PASSWORD = "starto2026";
@@ -469,6 +475,8 @@ export default function FanPortalApp() {
   const [activeThread, setAT]    = useState(null);
   const [activeMember, setAM]    = useState(null);
   const [expandedNews, setEN]    = useState(null);
+  const [dbNews,    setDbNews]   = useState(null);
+  const [newsLoading, setNewsLoading] = useState(false);
 
   // ── 匿名ID ──
   const [userId,    setUserId]   = useState("#????");
@@ -519,6 +527,24 @@ export default function FanPortalApp() {
     setNickname(name);
     try { localStorage.setItem("user_nickname", name); } catch {}
   };
+
+  // Supabaseからニュース取得（グループ切り替え時）
+  useEffect(() => {
+    if (!import.meta.env.VITE_SUPABASE_URL) return;
+    setDbNews(null);
+    setNewsLoading(true);
+    supabase
+      .from('news')
+      .select('*')
+      .eq('group_id', group.id)
+      .order('pub_date', { ascending: false })
+      .limit(20)
+      .then(({ data }) => {
+        setDbNews(data && data.length > 0 ? data : null);
+        setNewsLoading(false);
+      })
+      .catch(() => { setNewsLoading(false); });
+  }, [group.id]);
 
   const accent = group.color;
   const groupThreads = threads[group.id] || [];
@@ -615,26 +641,49 @@ export default function FanPortalApp() {
         {/* ニュース */}
         {tab==="news" && (
           <div>
-            {(NEWS[group.id]||[]).length===0 && <div style={{textAlign:"center",color:"rgba(255,255,255,0.3)",padding:"40px 0",fontSize:13}}>ニュースを準備中です</div>}
-            {(NEWS[group.id]||[]).map(item=>(
-              <div key={item.id} onClick={()=>setEN(expandedNews===item.id?null:item.id)}
-                style={{background:"#0F1524",border:`1px solid ${expandedNews===item.id?`${accent}40`:"rgba(255,255,255,0.07)"}`,borderRadius:12,padding:14,marginBottom:10,cursor:"pointer",transition:"border-color 0.2s"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                  <span style={{display:"inline-block",padding:"2px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:`${TAG_COLOR[item.tag]||"#888"}22`,color:TAG_COLOR[item.tag]||"#888"}}>{item.tag}</span>
-                  <span style={{fontSize:11,color:"rgba(255,255,255,0.28)"}}>{item.date}</span>
+            {newsLoading && (
+              <div style={{textAlign:"center",color:"rgba(255,255,255,0.3)",padding:"40px 0",fontSize:13}}>
+                <div style={{marginBottom:8}}>ニュースを取得中…</div>
+                <div style={{width:40,height:3,background:`${accent}22`,borderRadius:2,margin:"0 auto",overflow:"hidden"}}>
+                  <div style={{width:"60%",height:"100%",background:accent,borderRadius:2,animation:"shimmer 1s ease infinite"}}/>
                 </div>
-                <div style={{fontSize:14,fontWeight:700,lineHeight:1.5,color:"#EEF0FF"}}>{item.title}</div>
-                {expandedNews===item.id && (
-                  <div>
-                    <div style={{fontSize:12,color:"rgba(255,255,255,0.55)",lineHeight:1.7,marginTop:8,marginBottom:10}}>{item.body}</div>
-                    <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
-                      style={{display:"inline-flex",alignItems:"center",gap:5,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"6px 12px",fontSize:11,color:"rgba(255,255,255,0.55)",textDecoration:"none"}}>
-                      🔗 <span style={{fontWeight:600}}>{item.source}</span> で確認 ↗
-                    </a>
-                  </div>
-                )}
               </div>
-            ))}
+            )}
+            {!newsLoading && (() => {
+              const items = dbNews || (NEWS[group.id] || []).map((item, i) => ({
+                id: item.id ?? i,
+                tag: item.tag,
+                pub_date: item.date,
+                title: item.title,
+                body: item.body,
+                source: item.source,
+                url: item.url,
+              }));
+              if (items.length === 0) return <div style={{textAlign:"center",color:"rgba(255,255,255,0.3)",padding:"40px 0",fontSize:13}}>ニュースを準備中です</div>;
+              return items.map(item => {
+                const key = item.id;
+                const dateStr = item.pub_date ? (item.pub_date.length > 10 ? item.pub_date.slice(5,10).replace('-','/') : item.pub_date) : "";
+                return (
+                  <div key={key} onClick={()=>setEN(expandedNews===key?null:key)}
+                    style={{background:"#0F1524",border:`1px solid ${expandedNews===key?`${accent}40`:"rgba(255,255,255,0.07)"}`,borderRadius:12,padding:14,marginBottom:10,cursor:"pointer",transition:"border-color 0.2s"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                      <span style={{display:"inline-block",padding:"2px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:`${TAG_COLOR[item.tag]||"#888"}22`,color:TAG_COLOR[item.tag]||"#888"}}>{item.tag}</span>
+                      <span style={{fontSize:11,color:"rgba(255,255,255,0.28)"}}>{dateStr}</span>
+                    </div>
+                    <div style={{fontSize:14,fontWeight:700,lineHeight:1.5,color:"#EEF0FF"}}>{item.title}</div>
+                    {expandedNews===key && (
+                      <div>
+                        <div style={{fontSize:12,color:"rgba(255,255,255,0.55)",lineHeight:1.7,marginTop:8,marginBottom:10}}>{item.body}</div>
+                        <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
+                          style={{display:"inline-flex",alignItems:"center",gap:5,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"6px 12px",fontSize:11,color:"rgba(255,255,255,0.55)",textDecoration:"none"}}>
+                          🔗 <span style={{fontWeight:600}}>{item.source}</span> で確認 ↗
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
           </div>
         )}
 
